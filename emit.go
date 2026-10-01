@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"slices"
 	"sync/atomic"
 
 	"go.uber.org/zap"
@@ -71,6 +72,13 @@ func Emit(ctx context.Context, event Event) {
 	Default().emit(ctx, event)
 }
 
+// L can be used to access the backing [zap] logger directly.
+//
+// Attaches the same context just like [Emit], but without a typed event.
+func L(ctx context.Context) *zap.Logger {
+	return Default().logger.With(contextFields(ctx)...)
+}
+
 type fieldsKey struct{}
 
 // With returns a copy of ctx that attaches fields to every event emitted with it.
@@ -79,7 +87,7 @@ type fieldsKey struct{}
 // does not have to be repeated in every event's payload.
 func With(ctx context.Context, fields ...zap.Field) context.Context {
 	parent := contextFields(ctx)
-	return context.WithValue(ctx, fieldsKey{}, append(parent[:len(parent):len(parent)], fields...))
+	return context.WithValue(ctx, fieldsKey{}, append(slices.Clip(parent), fields...))
 }
 
 func contextFields(ctx context.Context) []zap.Field {
@@ -114,7 +122,7 @@ func (e *Emitter) record(ctx context.Context, event Event) {
 	}
 
 	fields := contextFields(ctx)
-	entry.Write(append(fields[:len(fields):len(fields)], zap.Object("event", eventObject{event}))...)
+	entry.Write(append(slices.Clip(fields), zap.Object("event", eventObject{event}))...)
 }
 
 // measure projects the event onto its metrics, and reports a panic instead of propagating it.

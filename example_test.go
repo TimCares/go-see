@@ -97,9 +97,12 @@ func Example() {
 	fmt.Println(artifactUploadsTotal)
 	fmt.Println(artifactUploadErrorsTotal)
 
+	see.L(ctx).Info("hello")
+
 	// Output:
 	// {"level":"info","msg":"storage.artifact.upload","session_id":"abc","event":{"id":"storage.artifact.upload","data":{"artifact_type":"recording","uri":"s3://calls/abc/recording.ogg","error":null}}}
 	// {"level":"warn","msg":"storage.artifact.upload","session_id":"abc","event":{"id":"storage.artifact.upload","data":{"artifact_type":"conversation_history","uri":"s3://calls/abc/history.json","error":{"raw_error":"context deadline exceeded","stable_error_reason":"timeout"}}}}
 	// {"conversation_history": 1, "recording": 1}
 	// {"conversation_history,timeout": 1}
+	// {"level":"info","msg":"hello","session_id":"abc"}
 }
