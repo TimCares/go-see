@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # The minimum version declared in go.mod, and the latest release.
+        go: ["1.24", "stable"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+      - run: go vet ./...
+      - run: go test -race -coverprofile=coverage.out ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14
+
+  tidy:
+    name: Tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - run: go mod tidy -diff
+
+  release:
+    name: Release
+    needs: [test, lint, tidy]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: release
+    permissions:
+      contents: write # Push the tag and create the GitHub release.
+      issues: write # Comment on the issues a release resolves.
+      pull-requests: write # Comment on the pull requests a release contains.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Without a previous tag, semantic-release would start at v1.0.0.
+      - name: Require a previous release
+        run: git describe --tags --match "v*" --abbrev=0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: >-
+          npx --yes
+          --package semantic-release@25
+          --package @semantic-release/exec@7
+          --package conventional-changelog-conventionalcommits@9
+          semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

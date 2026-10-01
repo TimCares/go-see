@@ -1,0 +1,84 @@
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+
+# Pre-commit philosophy: CHECK ONLY — hooks here verify but never modify files.
+# To auto-fix issues locally, run `make fix` (or the per-tool targets:
+# `make format`, `make lint`, `make repo-fix`).
+#
+# Hook stages used here:
+#   pre-commit  — per-tool checks on staged files (fast, granular).
+#   commit-msg  — commitizen enforces Conventional Commits format.
+#   pre-push    — runs the full `make check` aggregate; same as CI.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # `trailing-whitespace` and `end-of-file-fixer` are intentionally NOT
+      # listed here — they are auto-fixers with no check-only mode. Use
+      # `make repo-fix` to apply them.
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      # Fixers are available for explicit manual invocation only.
+      - id: trailing-whitespace
+        stages: [manual]
+      - id: end-of-file-fixer
+        stages: [manual]
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.16.2
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # Go hooks delegate to the Makefile, so the tool versions are pinned in one place.
+  # The whole module is checked, as a single file cannot be type checked on its own.
+  - repo: local
+    hooks:
+      - id: go-format
+        name: go format
+        entry: make check-format
+        language: system
+        files: \.go$
+        pass_filenames: false
+      - id: go-lint
+        name: go lint
+        entry: make check-lint
+        language: system
+        files: (\.go|^\.golangci\.yml)$
+        pass_filenames: false
+      - id: go-mod-tidy
+        name: go mod tidy
+        entry: make check-tidy
+        language: system
+        files: (\.go|^go\.(mod|sum))$
+        pass_filenames: false
+      - id: make-check
+        name: make check
+        entry: make check
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+

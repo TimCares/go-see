@@ -1,0 +1,21 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [{ "breaking": true, "release": "minor" }]
+      }
+    ],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    "@semantic-release/github",
+    [
+      "@semantic-release/exec",
+      {
+        "publishCmd": "curl --fail --silent --show-error https://proxy.golang.org/github.com/TimCares/go-see/@v/${nextRelease.gitTag}.info"
+      }
+    ]
+  ]
+}
