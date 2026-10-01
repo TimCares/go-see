@@ -10,12 +10,14 @@
       }
     ],
     ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
-    "@semantic-release/github",
+    ["@semantic-release/changelog", { "changelogTitle": "# Changelog" }],
     [
-      "@semantic-release/exec",
+      "@semantic-release/git",
       {
-        "publishCmd": "curl --fail --silent --show-error https://proxy.golang.org/github.com/TimCares/go-see/@v/${nextRelease.gitTag}.info"
+        "assets": ["CHANGELOG.md"],
+        "message": "chore(release): ${nextRelease.gitTag} [skip ci]\n\n${nextRelease.notes}"
       }
-    ]
+    ],
+    "@semantic-release/github"
   ]
 }

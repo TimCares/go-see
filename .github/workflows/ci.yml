@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: release
     permissions:
-      contents: write # Push the tag and create the GitHub release.
+      contents: write # Push the changelog commit, the tag, and create the GitHub release.
       issues: write # Comment on the issues a release resolves.
       pull-requests: write # Comment on the pull requests a release contains.
     steps:
@@ -69,7 +69,8 @@ jobs:
       - run: >-
           npx --yes
           --package semantic-release@25
-          --package @semantic-release/exec@7
+          --package @semantic-release/changelog@7
+          --package @semantic-release/git@11
           --package conventional-changelog-conventionalcommits@9
           semantic-release
         env:

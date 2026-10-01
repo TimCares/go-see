@@ -34,10 +34,10 @@ are squash merged, so it is the pull request title that has to follow them, CI c
 
 Releases are cut by [semantic-release](https://github.com/semantic-release/semantic-release)
 on every push to `main`, once CI is green. It reads the commits since the last tag,
-pushes the next `vX.Y.Z` tag, and publishes the release notes as a
-[GitHub release](https://github.com/TimCares/go-see/releases). Nobody tags by hand.
-Finally, it requests the new version from `proxy.golang.org`, which makes it show up on
-[pkg.go.dev](https://pkg.go.dev/github.com/TimCares/go-see) right away.
+prepends the release notes to [CHANGELOG.md](CHANGELOG.md) in a `chore(release)` commit,
+tags that commit `vX.Y.Z`, and publishes the same notes as a
+[GitHub release](https://github.com/TimCares/go-see/releases). Nobody tags or edits the
+changelog by hand.
 
 | Commit                                      | Release                  |
 | ------------------------------------------- | ------------------------ |

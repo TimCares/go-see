@@ -153,7 +153,8 @@ The `see` root belongs to go-see and is used for meta observability:
 ## Status
 
 go-see is pre `v1`. The API may still change between minor versions until then.
-Every release and its notes are listed on the [releases page](https://github.com/TimCares/go-see/releases).
+Every release and its notes are listed in the [changelog](CHANGELOG.md) and on the
+[releases page](https://github.com/TimCares/go-see/releases).
 
 ## Contributing
 
