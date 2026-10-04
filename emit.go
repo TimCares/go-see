@@ -65,9 +65,9 @@ func SetDefault(e *Emitter) {
 
 // Emit records event on every sink it projects onto, using the [Default] emitter.
 //
-// The event's id becomes the log message and the `event.id` field, its payload
-// becomes the `event.data` group, and every field attached to ctx through [With]
-// is added alongside.
+// The event's [FriendlyMessenger.Message], or its id, becomes the log message, its id
+// becomes the `event.id` field, its payload becomes the `event.data` group, and every
+// field attached to ctx through [With] is added alongside.
 func Emit(ctx context.Context, event Event) {
 	Default().emit(ctx, event)
 }
@@ -104,25 +104,63 @@ func (e *Emitter) emit(ctx context.Context, event Event) {
 		return
 	}
 
-	e.record(ctx, event)
+	if failure := e.record(ctx, event); failure != nil {
+		// Not routed through emit, a failure event never measures itself.
+		e.record(ctx, failure)
+	}
 
 	if measurer, ok := event.(Measurer); ok {
 		if failure := measure(ctx, event.ID(), measurer); failure != nil {
-			// Deliberately not routed through emit, a failure event never measures itself.
+			// Not routed through emit, a failure event never measures itself.
 			e.record(ctx, failure)
 		}
 	}
 }
 
-// record projects the event onto the log sink.
-func (e *Emitter) record(ctx context.Context, event Event) {
-	entry := e.logger.Check(levelOf(event), event.ID().String())
-	if entry == nil {
-		return
+// logMessage gets the message put into the message field of the [zapcore.Logger].
+//
+// If the [Event] is a [FriendlyMessenger] we take the friendly message [FriendlyMessenger.Message],
+// otherwise we use the [Event.ID].
+//
+// If [FriendlyMessenger.Message] returns an empty string or panics we fall back to [Event.ID],
+// a panic is reported instead of propagated.
+func logMessage(event Event) (message string, failure *messageFailure) {
+	friendlyMessenger, ok := event.(FriendlyMessenger)
+	if !ok {
+		return event.ID().String(), nil
 	}
 
-	fields := contextFields(ctx)
-	entry.Write(append(slices.Clip(fields), zap.Object("event", eventObject{event}))...)
+	defer func() {
+		if r := recover(); r != nil {
+			message = event.ID().String()
+			failure = &messageFailure{
+				EventID:    event.ID(),
+				Error:      Fail(fmt.Errorf("message panicked: %v", r), messageErrorPanic),
+				StackTrace: string(debug.Stack()),
+			}
+		}
+	}()
+
+	if message = friendlyMessenger.Message(); message == "" {
+		return event.ID().String(), nil
+	}
+	return message, nil
+}
+
+// record projects the event onto the log sink, and returns the failure of a panicking Message.
+func (e *Emitter) record(ctx context.Context, event Event) *messageFailure {
+	level := levelOf(event)
+	// Checked before building the message, so a disabled level never calls Message.
+	if !e.logger.Core().Enabled(level) {
+		return nil
+	}
+
+	message, failure := logMessage(event)
+	if entry := e.logger.Check(level, message); entry != nil {
+		fields := contextFields(ctx)
+		entry.Write(append(slices.Clip(fields), zap.Object("event", eventObject{event}))...)
+	}
+	return failure
 }
 
 // measure projects the event onto its metrics, and reports a panic instead of propagating it.
@@ -159,6 +197,7 @@ func (o eventObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 var (
 	emitErrorID    = register("see.emit.error")
 	measureErrorID = register("see.measure.error")
+	messageErrorID = register("see.message.error")
 )
 
 type emitErrorReason string
@@ -192,3 +231,19 @@ func (measureFailure) ID() ID { return measureErrorID }
 
 // Level reports a failed measure as a warning: not critical, but worth noting and fixing.
 func (measureFailure) Level() Level { return LevelWarn }
+
+type messageErrorReason string
+
+const messageErrorPanic messageErrorReason = "panic"
+
+// messageFailure is recorded when an event's Message panicked.
+type messageFailure struct {
+	EventID    ID                         `json:"event_id"`
+	Error      *Error[messageErrorReason] `json:"error"`
+	StackTrace string                     `json:"stack_trace"`
+}
+
+func (messageFailure) ID() ID { return messageErrorID }
+
+// Level reports a failed message as a warning: the event is still recorded, under its id.
+func (messageFailure) Level() Level { return LevelWarn }

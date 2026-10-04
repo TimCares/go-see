@@ -45,6 +45,18 @@ type Measurer interface {
 	Measure(ctx context.Context)
 }
 
+// FriendlyMessenger is implemented by events that have a human readable, plain language string.
+//
+// Message fills the MessageKey field of the [zapcore.Logger].
+// Events that are not a [FriendlyMessenger], or return an empty message, have [ID] as
+// their log message.
+//
+// Message is only called if the event's level is enabled. A panic is recovered and
+// reported as "see.message.error", the event is then recorded with [ID] as its message.
+type FriendlyMessenger interface {
+	Message() string
+}
+
 // Level is how bad an occurrence is.
 //
 // Deliberately narrower than zap's levels: recording an event must never panic or

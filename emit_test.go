@@ -16,6 +16,7 @@ var (
 	testUploadID    = NewID("test.emit.upload")
 	testLevelID     = NewID("test.emit.level")
 	testMarshaledID = NewID("test.emit.marshaled")
+	testFriendlyID  = NewID("test.emit.friendly")
 )
 
 type testUploadReason string
@@ -63,12 +64,28 @@ func (e testMarshaled) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	return nil
 }
 
+type testFriendly struct {
+	URI string `json:"uri"`
+
+	message func() string
+}
+
+func (testFriendly) ID() ID { return testFriendlyID }
+
+func (e testFriendly) Message() string { return e.message() }
+
 type testNoID struct{}
 
 func (testNoID) ID() ID { return ID{} }
 
 // newTestEmitter returns an emitter writing json records, one per line, to the returned buffer.
 func newTestEmitter(t *testing.T) (*Emitter, *bytes.Buffer) {
+	t.Helper()
+	return newTestEmitterAt(t, zapcore.DebugLevel)
+}
+
+// newTestEmitterAt is [newTestEmitter], with every record below level discarded.
+func newTestEmitterAt(t *testing.T, level zapcore.Level) (*Emitter, *bytes.Buffer) {
 	t.Helper()
 
 	buf := &bytes.Buffer{}
@@ -79,7 +96,7 @@ func newTestEmitter(t *testing.T) (*Emitter, *bytes.Buffer) {
 		EncodeLevel:  zapcore.LowercaseLevelEncoder,
 		EncodeCaller: zapcore.ShortCallerEncoder,
 	})
-	logger := zap.New(zapcore.NewCore(encoder, zapcore.AddSync(buf), zapcore.DebugLevel), zap.AddCaller())
+	logger := zap.New(zapcore.NewCore(encoder, zapcore.AddSync(buf), level), zap.AddCaller())
 
 	emitter, err := New(Config{Logger: logger})
 	if err != nil {
@@ -211,6 +228,95 @@ func TestEmitUsesTheObjectMarshaler(t *testing.T) {
 
 	if got := path(t, decodeRecord(t, buf), "event", "data", "marshaled_name"); got != "fast" {
 		t.Errorf("marshaled_name = %v, want fast", got)
+	}
+}
+
+func TestEmitUsesTheFriendlyMessage(t *testing.T) {
+	emitter, buf := newTestEmitter(t)
+
+	emitter.Emit(context.Background(), testFriendly{
+		URI:     "s3://bucket/recording",
+		message: func() string { return "uploaded s3://bucket/recording" },
+	})
+
+	record := decodeRecord(t, buf)
+	if got := record["msg"]; got != "uploaded s3://bucket/recording" {
+		t.Errorf("msg = %v, want uploaded s3://bucket/recording", got)
+	}
+	if got := path(t, record, "event", "id"); got != "test.emit.friendly" {
+		t.Errorf("event.id = %v, want test.emit.friendly", got)
+	}
+	if got := path(t, record, "event", "data"); mustJSON(t, got) != `{"uri":"s3://bucket/recording"}` {
+		t.Errorf("event.data = %s, want only the payload", mustJSON(t, got))
+	}
+}
+
+func TestEmitFallsBackToTheIDForAnEmptyMessage(t *testing.T) {
+	emitter, buf := newTestEmitter(t)
+
+	emitter.Emit(context.Background(), testFriendly{message: func() string { return "" }})
+
+	if got := decodeRecord(t, buf)["msg"]; got != "test.emit.friendly" {
+		t.Errorf("msg = %v, want test.emit.friendly", got)
+	}
+}
+
+func TestEmitSkipsTheMessageForADisabledLevel(t *testing.T) {
+	emitter, buf := newTestEmitterAt(t, zapcore.WarnLevel)
+
+	called := false
+	emitter.Emit(context.Background(), testFriendly{message: func() string {
+		called = true
+		return "expensive"
+	}})
+
+	if called {
+		t.Error("Message called for a disabled level")
+	}
+	if records := decodeRecords(t, buf); len(records) != 0 {
+		t.Errorf("got %d records, want none: %v", len(records), records)
+	}
+}
+
+func TestEmitReportsAPanickingMessage(t *testing.T) {
+	emitter, buf := newTestEmitter(t)
+
+	emitter.Emit(context.Background(), testFriendly{
+		URI:     "s3://bucket/recording",
+		message: func() string { panic("nil pointer in message") },
+	})
+
+	records := decodeRecords(t, buf)
+	if len(records) != 2 {
+		t.Fatalf("got %d records, want the event and its message failure: %v", len(records), records)
+	}
+
+	event := records[0]
+	if got := event["msg"]; got != "test.emit.friendly" {
+		t.Errorf("event msg = %v, want test.emit.friendly", got)
+	}
+	if got := path(t, event, "event", "data", "uri"); got != "s3://bucket/recording" {
+		t.Errorf("uri = %v, want s3://bucket/recording", got)
+	}
+
+	failure := records[1]
+	if got := failure["msg"]; got != "see.message.error" {
+		t.Errorf("msg = %v, want see.message.error", got)
+	}
+	if got := failure["level"]; got != "warn" {
+		t.Errorf("level = %v, want warn", got)
+	}
+	if caller, _ := failure["caller"].(string); !strings.Contains(caller, "emit_test.go") {
+		t.Errorf("caller = %q, want the call site in emit_test.go", caller)
+	}
+	if got := path(t, failure, "event", "data", "event_id"); got != "test.emit.friendly" {
+		t.Errorf("event_id = %v, want test.emit.friendly", got)
+	}
+	if got := path(t, failure, "event", "data", "error", "stable_error_reason"); got != "panic" {
+		t.Errorf("stable_error_reason = %v, want panic", got)
+	}
+	if got, _ := path(t, failure, "event", "data", "error", "raw_error").(string); !strings.Contains(got, "nil pointer in message") {
+		t.Errorf("raw_error = %q, want the panic value", got)
 	}
 }
 

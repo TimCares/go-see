@@ -24,7 +24,8 @@
 //
 // The event's id becomes the log message and the `event.id` field, its payload
 // becomes the `event.data` group. Optional behaviour is opted into by implementing
-// [Leveler] for severity and [Measurer] for metrics.
+// [Leveler] for severity, [Measurer] for metrics and [FriendlyMessenger] for a human
+// readable log message.
 //
 // # Stability
 //
@@ -40,4 +41,5 @@
 //
 //	see.emit.error     An event without a valid id was emitted.
 //	see.measure.error  An event's Measure panicked, its metrics are lost.
+//	see.message.error  An event's Message panicked, it is recorded under its id.
 package see

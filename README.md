@@ -8,7 +8,6 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/TimCares/go-see.svg)](https://pkg.go.dev/github.com/TimCares/go-see)
 [![CI](https://github.com/TimCares/go-see/actions/workflows/ci.yml/badge.svg)](https://github.com/TimCares/go-see/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/TimCares/go-see)](https://goreportcard.com/report/github.com/TimCares/go-see)
 [![Release](https://img.shields.io/github/v/release/TimCares/go-see?sort=semver)](https://github.com/TimCares/go-see/releases)
 [![semantic-release: conventionalcommits](https://img.shields.io/badge/semantic--release-conventionalcommits-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -116,6 +115,35 @@ func (e ArtifactUpload) Level() see.Level {
 }
 ```
 
+**Messages** default to the event's id. Implement `Message` to put a human readable
+line into the log message instead, e.g. for reading logs in a terminal. The id is still
+recorded as `event.id`, so you should filter and alert on that, never on the message. `Message`
+is only called if the event's level is enabled, an empty message falls back to the id.
+In case of a panic, the message becomes the id as a fallback (and `see.message.error` is emitted).
+
+```go
+// Message describes the upload in plain language.
+func (e ArtifactUpload) Message() string {
+	if e.Error != nil {
+		return "failed to upload artifact to " + e.URI
+	}
+	return "uploaded artifact to " + e.URI
+}
+```
+
+Which turns the record from the quick start into:
+
+```json
+{
+  "level": "info",
+  "msg": "uploaded artifact to s3://calls/abc/recording.ogg",
+  "event": {
+    "id": "storage.artifact.upload",
+    "data": { "uri": "s3://calls/abc/recording.ogg", "error": null }
+  }
+}
+```
+
 **Metrics** are opted into by implementing `Measure`. go-see does not care which
 metrics library you use, it only calls `Measure` after the record is written and
 recovers a panic, so a broken label set degrades the metric rather than the event:
@@ -145,10 +173,11 @@ ctx = see.With(ctx, zap.String("session_id", sessionID))
 
 The `see` root belongs to go-see and is used for meta observability:
 
-| Id                  | Level | Meaning                                              |
-| ------------------- | ----- | ---------------------------------------------------- |
-| `see.emit.error`    | error | An event without a valid id was emitted.             |
-| `see.measure.error` | warn  | An event's `Measure` panicked, its metrics are lost. |
+| Id                  | Level | Meaning                                                     |
+| ------------------- | ----- | ----------------------------------------------------------- |
+| `see.emit.error`    | error | An event without a valid id was emitted.                    |
+| `see.measure.error` | warn  | An event's `Measure` panicked, its metrics are lost.        |
+| `see.message.error` | warn  | An event's `Message` panicked, it is recorded under its id. |
 
 ## Status
 
