@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0](https://github.com/TimCares/go-see/compare/v0.3.1...v0.4.0) (2026-10-05)
+
+### Features
+
+* **zap:** added IsFriendly field to zap Field for downstream detection ([0caa530](https://github.com/TimCares/go-see/commit/0caa530faaf12590360e8c07615de4cf93f1576c))
+
 ## [0.3.1](https://github.com/TimCares/go-see/compare/v0.3.0...v0.3.1) (2026-10-05)
 
 ### Bug Fixes
