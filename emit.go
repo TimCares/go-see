@@ -196,7 +196,7 @@ type EventObject struct {
 // Event return the actual user-defined [Event] passed to [Emit].
 func (o EventObject) Event() Event { return o.event }
 
-// Friendly reports if the message of the [Event] landing in the log is friendly or not.
+// IsFriendly reports if the message of the [Event] landing in the log is friendly or not.
 //
 // An [Event] can report an "unfriendly" message even if it implements [FriendlyMessenger].
 // This is either the result of [FriendlyMessenger.Message] panicing or returning an empty string.
