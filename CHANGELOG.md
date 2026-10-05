@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1](https://github.com/TimCares/go-see/compare/v0.3.0...v0.3.1) (2026-10-05)
+
+### Bug Fixes
+
+* **zap:** fixed wrong `caller` location when using plain logger with see.L ([47278eb](https://github.com/TimCares/go-see/commit/47278eb90dc0e898b1d7c3c7111ac117f4013159))
+
 ## [0.3.0](https://github.com/TimCares/go-see/compare/v0.2.0...v0.3.0) (2026-10-04)
 
 ### Features
