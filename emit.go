@@ -128,10 +128,10 @@ func (e *Emitter) emit(ctx context.Context, event Event) {
 //
 // If [FriendlyMessenger.Message] returns an empty string or panics we fall back to [Event.ID],
 // a panic is reported instead of propagated.
-func logMessage(event Event) (message string, failure *messageFailure) {
+func logMessage(event Event) (message string, isFriendly bool, failure *messageFailure) {
 	friendlyMessenger, ok := event.(FriendlyMessenger)
 	if !ok {
-		return event.ID().String(), nil
+		return event.ID().String(), false, nil
 	}
 
 	defer func() {
@@ -146,9 +146,9 @@ func logMessage(event Event) (message string, failure *messageFailure) {
 	}()
 
 	if message = friendlyMessenger.Message(); message == "" {
-		return event.ID().String(), nil
+		return event.ID().String(), false, nil // Fallback to event id if friendly message is empty.
 	}
-	return message, nil
+	return message, true, nil
 }
 
 // record projects the event onto the log sink, and returns the failure of a panicking Message.
@@ -159,10 +159,14 @@ func (e *Emitter) record(ctx context.Context, event Event) *messageFailure {
 		return nil
 	}
 
-	message, failure := logMessage(event)
+	message, isFriendly, failure := logMessage(event)
 	if entry := e.logger.Check(level, message); entry != nil {
 		fields := contextFields(ctx)
-		entry.Write(append(slices.Clip(fields), zap.Object("event", eventObject{event}))...)
+		eventObject := EventObject{
+			event:      event,
+			isFriendly: isFriendly,
+		}
+		entry.Write(append(slices.Clip(fields), zap.Object("event", eventObject))...)
 	}
 	return failure
 }
@@ -183,12 +187,26 @@ func measure(ctx context.Context, id ID, measurer Measurer) (failure *measureFai
 	return nil
 }
 
-// eventObject groups an event into `{"id": ..., "data": ...}`.
-type eventObject struct {
-	event Event
+// EventObject groups an event into `{"id": ..., "data": ...}`.
+type EventObject struct {
+	event      Event
+	isFriendly bool // msg is the event's own Message, not the id fallback.
 }
 
-func (o eventObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+// Event return the actual user-defined [Event] passed to [Emit].
+func (o EventObject) Event() Event { return o.event }
+
+// Friendly reports if the message of the [Event] landing in the log is friendly or not.
+//
+// An [Event] can report an "unfriendly" message even if it implements [FriendlyMessenger].
+// This is either the result of [FriendlyMessenger.Message] panicing or returning an empty string.
+//
+// In both cases [Event.ID] is used as the fallback, which is machine readable, but not natural
+// language, and the reason why this will return [false].
+func (o EventObject) IsFriendly() bool { return o.isFriendly }
+
+// MarshalLogObject writes the [EventObject.event] without the [EventObject.isFriendly] flag.
+func (o EventObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("id", o.event.ID().String())
 	if marshaler, ok := o.event.(zapcore.ObjectMarshaler); ok {
 		return enc.AddObject("data", marshaler)
