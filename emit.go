@@ -25,6 +25,9 @@ type Config struct {
 // Emitter fans an event out to every sink it projects onto.
 type Emitter struct {
 	logger *zap.Logger
+	// direct is the configured logger without the caller skip of logger, so [L]
+	// reports its own call site.
+	direct *zap.Logger
 }
 
 // New builds an [Emitter] from cfg.
@@ -34,7 +37,7 @@ func New(cfg Config) (*Emitter, error) {
 	}
 
 	// Frame 0 is record, frame 1 is emit, frame 2 is Emit, frame 3 is the caller.
-	return &Emitter{logger: cfg.Logger.WithOptions(zap.AddCallerSkip(3))}, nil
+	return &Emitter{logger: cfg.Logger.WithOptions(zap.AddCallerSkip(3)), direct: cfg.Logger}, nil
 }
 
 // Emit records event on every sink it projects onto.
@@ -43,7 +46,7 @@ func (e *Emitter) Emit(ctx context.Context, event Event) {
 }
 
 var (
-	nop            = &Emitter{logger: zap.NewNop()}
+	nop            = &Emitter{logger: zap.NewNop(), direct: zap.NewNop()}
 	defaultEmitter atomic.Pointer[Emitter]
 )
 
@@ -74,9 +77,10 @@ func Emit(ctx context.Context, event Event) {
 
 // L can be used to access the backing [zap] logger directly.
 //
-// Attaches the same context just like [Emit], but without a typed event.
+// Attaches the same context just like [Emit], but without a typed event, and reports
+// the call site of the log call as the caller.
 func L(ctx context.Context) *zap.Logger {
-	return Default().logger.With(contextFields(ctx)...)
+	return Default().direct.With(contextFields(ctx)...)
 }
 
 type fieldsKey struct{}

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -421,4 +423,52 @@ func mustJSON(t *testing.T, value any) string {
 		t.Fatalf("encode %v: %v", value, err)
 	}
 	return string(encoded)
+}
+
+func TestDefaultSetsPlainZapLogger(t *testing.T) {
+	emitter, buf := newTestEmitter(t)
+	SetDefault(emitter)
+	t.Cleanup(func() { SetDefault(nil) })
+
+	ctx := With(context.Background(), zap.String("session_id", "abc"))
+	L(ctx).Info("hello")
+
+	record := decodeRecord(t, buf)
+	if got := record["msg"]; got != "hello" {
+		t.Errorf("msg = %v, want hello", got)
+	}
+	if got := record["session_id"]; got != "abc" {
+		t.Errorf("session_id = %v, want abc", got)
+	}
+	if got, ok := record["event"]; ok {
+		t.Errorf("event = %v, want no event group on a plain log", got)
+	}
+}
+
+func TestPlainZapLoggerCorrectCallerLocation(t *testing.T) {
+	emitter, buf := newTestEmitter(t)
+	SetDefault(emitter)
+	t.Cleanup(func() { SetDefault(nil) })
+
+	_, _, line, _ := runtime.Caller(0)
+	L(context.Background()).Info("hello")
+
+	want := fmt.Sprintf("emit_test.go:%d", line+1)
+	if caller, _ := decodeRecord(t, buf)["caller"].(string); !strings.HasSuffix(caller, want) {
+		t.Errorf("caller = %q, want the call site %s", caller, want)
+	}
+}
+
+func TestSetDefaultNilRestoresThePlainZapLogger(t *testing.T) {
+	emitter, buf := newTestEmitter(t)
+	SetDefault(emitter)
+	SetDefault(nil)
+
+	if Default() != nop {
+		t.Fatal("Default() is not the discarding emitter")
+	}
+	L(context.Background()).Info("dropped")
+	if records := decodeRecords(t, buf); len(records) != 0 {
+		t.Errorf("got %d records, want none: %v", len(records), records)
+	}
 }
